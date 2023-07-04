@@ -6,18 +6,16 @@ import matplotlib.pyplot as plt
 
 def populate(adj_list, sides, anchors):
     # FILL IN WITH METHOD TO POPULATE THE DATA STRUCTURES. KEEP INTEGRAL SIDE LENGTHS.
-    adj_list = {"B0": [10], "B1": [10], "B2": [10], "B3": [10, 10, 10, 10],
-               "B4": [10, 10], "B5": [10], "B6": [10, 10, 10, 15], "B7": [10],
-               "B8": [10], "B9": [10, 10]}
-    sides = [15, 10, 20, 80, 15, 12, 25, 15, 20, 20]
-    anchors = [0, 3, 4, 6, 9]
+    adj_list = {}
+    sides = [[15, 25], [10, 20], [20, 30], [80, 100], [15, 35], [12, 22], [25, 50], [15, 25], [20, 30], [20, 40]]
+    anchors = [0, 3, 6, 9]
     return adj_list, sides, anchors
 
 def create_envelopes(adj_list, sides):
     # Create an envelope for master-slaves, to pack the envelopes later instead of actual squares.
     for rect in adj_list.keys():
         slaves = adj_list[rect]
-        side_master = sides[int(rect[1])]
+        side_master = sides[int(rect[1])][0]
         number_slaves = len(slaves)
         """
         Refer notes to visualise what all edge cases have been excluded, and the reasoning behind the choices.
@@ -31,17 +29,19 @@ def create_envelopes(adj_list, sides):
             side = slaves[2] + max(slaves[0], slaves[1]) + side_master
         else:
             side = max(slaves[2], slaves[3]) + max(slaves[0], slaves[1]) + side_master
-        sides[int(rect[1])] = side
+        sides[int(rect[1])] = [side_master, side]
     # First function which should be ran for creating envelopes.
     return adj_list, sides
 
 def translate_bottom(last, existing, side):
     # Idea: Place the initial polygon at the bottom left, and translate it till it reaches bottom right.
+    
+    # sides[0] representing length and sides[1] representing breadth.
     coordinates = list(last.exterior.coords)
     coordinates[3] = coordinates[0]
-    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side)))
-    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side, 0)))
-    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side)))
+    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side[1])))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[0], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[1])))
     coordinates[4] = coordinates[0]
     translated = Polygon(coordinates)
     # Translate it by 1.0 in x-direction till there is some overlap of sides.
@@ -58,17 +58,52 @@ def translate_bottom(last, existing, side):
                 optimum_bottom = translated
                 min_area = ar
         translated = translate(translated, xoff=1.0)
-    if not possible:
+    
+    # sides[0] representing breadth and sides[0] represnting length.
+    coordinates = list(last.exterior.coords)
+    coordinates[3] = coordinates[0]
+    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side[0])))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[1], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[0])))
+    coordinates[4] = coordinates[0]
+    translated = Polygon(coordinates)
+    # Translate it by 1.0 in x-direction till there is some overlap of sides.
+    min_area_rotated = sys.maxsize
+    possible_rotated = False
+    # Possible bug: Check for -ve x or y coordinates.
+    while translated.bounds[0] < last.bounds[2]:
+        if (existing.touches(translated) or existing.disjoint(translated)) and translated.bounds[1] >= 0:
+            if not possible_rotated:
+                possible_rotated = True
+            envelope = unary_union([existing, translated]).bounds
+            ar = box(envelope[0], envelope[1], envelope[2], envelope[3]).area
+            if ar <= min_area:
+                optimum_bottom_rotated = translated
+                min_area_rotated = ar
+        translated = translate(translated, xoff=1.0)
+    
+    # Returning the polygon associated with the minimum envelope area.
+    if not possible and not possible_rotated:
         return last, -1
-    return optimum_bottom, min_area
+    elif not possible and possible_rotated:
+        return optimum_bottom_rotated, min_area_rotated
+    elif possible and not possible_rotated:
+        return optimum_bottom, min_area
+    else:
+        if min_area <= min_area_rotated:
+            return optimum_bottom, min_area
+        else:
+            return optimum_bottom_rotated, min_area_rotated
 
 def translate_top(last, existing, side):
     # Idea: Place the initial polygon at the top left, and translate it till it reaches top right.
+    
+    # sides[0] representing length and sides[1] representing breadth.
     coordinates = list(last.exterior.coords)
     coordinates[0] = coordinates[3]
-    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side, 0)))
-    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side)))
-    coordinates[3] = tuple(x - y for x, y in zip(coordinates[2], (side, 0)))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[0], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[1])))
+    coordinates[3] = tuple(x - y for x, y in zip(coordinates[2], (side[0], 0)))
     coordinates[4] = coordinates[0]
     translated = Polygon(coordinates)
     # Translate it by 1.0 in x-direction till there is some overlap of sides.
@@ -85,17 +120,52 @@ def translate_top(last, existing, side):
                 optimum_top = translated
                 min_area = ar
         translated = translate(translated, xoff=1.0)
-    if not possible:
+    
+    # sides[0] representing breadth and sides[1] representing length.
+    coordinates = list(last.exterior.coords)
+    coordinates[0] = coordinates[3]
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[1], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[0])))
+    coordinates[3] = tuple(x - y for x, y in zip(coordinates[2], (side[1], 0)))
+    coordinates[4] = coordinates[0]
+    translated = Polygon(coordinates)
+    # Translate it by 1.0 in x-direction till there is some overlap of sides.
+    min_area_rotated = sys.maxsize
+    possible_rotated = False
+    # Possible bug: Check for -ve x or y coordinates.
+    while translated.bounds[0] < last.bounds[2]:
+        if (existing.touches(translated) or existing.disjoint(translated)) and translated.bounds[1] >= 0:
+            if not possible_rotated:
+                possible_rotated = True
+            envelope = unary_union([existing, translated]).bounds
+            ar = box(envelope[0], envelope[1], envelope[2], envelope[3]).area
+            if ar <= min_area:
+                optimum_top_rotated = translated
+                min_area_rotated = ar
+        translated = translate(translated, xoff=1.0)
+
+    # Returning the polygon associated with the minimum envelope area.
+    if not possible and not possible_rotated:
         return last, -1
-    return optimum_top, min_area
+    elif not possible and possible_rotated:
+        return optimum_top_rotated, min_area_rotated
+    elif possible and not possible_rotated:
+        return optimum_top, min_area
+    else:
+        if min_area <= min_area_rotated:
+            return optimum_top, min_area
+        else:
+            return optimum_top_rotated, min_area_rotated
 
 def translate_top_right(last, existing, side):
     # Idea: Place the initial polygon on the right, and in case of equal areas, eveolve towards the top.
+    
+    # sides[0] representing length and sides[1] representing breadth.
     coordinates = list(last.exterior.coords)
     coordinates[0] = coordinates[1]
-    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side, 0)))
-    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side)))
-    coordinates[3] = tuple(x + y for x, y in zip(coordinates[0], (0, side)))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[0], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[1])))
+    coordinates[3] = tuple(x + y for x, y in zip(coordinates[0], (0, side[1])))
     coordinates[4] = coordinates[0]
     translated = Polygon(coordinates)
     # Translate it by 1.0 in x-direction till there is some overlap of sides.
@@ -112,17 +182,52 @@ def translate_top_right(last, existing, side):
                 optimum_rt = translated
                 min_area = ar
         translated = translate(translated, yoff=1.0)
-    if not possible:
+        
+    # sides[0] representing breadth and sides[1] representing length.
+    coordinates = list(last.exterior.coords)
+    coordinates[0] = coordinates[1]
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[1], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[0])))
+    coordinates[3] = tuple(x + y for x, y in zip(coordinates[0], (0, side[0])))
+    coordinates[4] = coordinates[0]
+    translated = Polygon(coordinates)
+    # Translate it by 1.0 in x-direction till there is some overlap of sides.
+    min_area_rotated = sys.maxsize
+    possible_rotated = False
+    # Possible bug: Check for -ve x or y coordinates.
+    while translated.bounds[1] < last.bounds[3]:
+        if (existing.touches(translated) or existing.disjoint(translated)) and translated.bounds[1] >= 0:
+            if not possible_rotated:
+                possible_rotated = True
+            envelope = unary_union([existing, translated]).bounds
+            ar = box(envelope[0], envelope[1], envelope[2], envelope[3]).area
+            if ar <= min_area:
+                optimum_rt_rotated = translated
+                min_area_rotated = ar
+        translated = translate(translated, yoff=1.0)
+    
+    # Returning the polygon associated with the minimum envelope area.
+    if not possible and not possible_rotated:
         return last, -1
-    return optimum_rt, min_area
+    elif not possible and possible_rotated:
+        return optimum_rt_rotated, min_area_rotated
+    elif possible and not possible_rotated:
+        return optimum_rt, min_area
+    else:
+        if min_area <= min_area_rotated:
+            return optimum_rt, min_area
+        else:
+            return optimum_rt_rotated, min_area_rotated
 
 def translate_top_left(last, existing, side):
     # Idea: Place the initial polygon on the right, and in case of equal areas, eveolve towards the bottom.
+    
+    # sides[0] representing length and sides[1] representing breadth.
     coordinates = list(last.exterior.coords)
     coordinates[3] = coordinates[2]
-    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side)))
-    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side, 0)))
-    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side)))
+    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side[1])))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[0], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[1])))
     coordinates[4] = coordinates[0]
     translated = Polygon(coordinates)
     # Translate it by 1.0 in x-direction till there is some overlap of sides.
@@ -139,23 +244,62 @@ def translate_top_left(last, existing, side):
                 optimum_rb = translated
                 min_area = ar
         translated = translate(translated, yoff=-1.0)
-    if not possible:
+        
+    # sides[0] representing breadth and sides[1] representing length.
+    coordinates = list(last.exterior.coords)
+    coordinates[3] = coordinates[2]
+    coordinates[0] = tuple(x - y for x, y in zip(coordinates[3], (0, side[0])))
+    coordinates[1] = tuple(x + y for x, y in zip(coordinates[0], (side[1], 0)))
+    coordinates[2] = tuple(x + y for x, y in zip(coordinates[1], (0, side[0])))
+    coordinates[4] = coordinates[0]
+    translated = Polygon(coordinates)
+    # Translate it by 1.0 in x-direction till there is some overlap of sides.
+    min_area_rotated = sys.maxsize
+    possible_rotated = False
+    # Possible bug: Check for -ve x or y coordinates.
+    while translated.bounds[3] > last.bounds[1]:
+        if (existing.touches(translated) or existing.disjoint(translated)) and translated.bounds[1] >= 0:
+            if not possible_rotated:
+                possible_rotated = True
+            envelope = unary_union([existing, translated]).bounds
+            ar = box(envelope[0], envelope[1], envelope[2], envelope[3]).area
+            if ar <= min_area:
+                optimum_rb_rotated = translated
+                min_area_rotated = ar
+        translated = translate(translated, yoff=-1.0)
+    
+    # Returning the polygon associated with the minimum envelope area.
+    if not possible and not possible_rotated:
         return last, -1
-    return optimum_rb, min_area
+    elif not possible and possible_rotated:
+        return optimum_rb_rotated, min_area_rotated
+    elif possible and not possible_rotated:
+        return optimum_rb, min_area
+    else:
+        if min_area <= min_area_rotated:
+            return optimum_rb, min_area
+        else:
+            return optimum_rb_rotated, min_area_rotated
 
-def plot(to_plot, index):
+def plot(last, current, index):
     # A generic plotting function.
-    x, y = to_plot.exterior.xy
-    plt.plot(x, y)
-    x_centroid, y_centroid = to_plot.centroid.coords[0]
-    plt.annotate(index, (x_centroid, y_centroid), color="red", ha="center", va="center", fontsize=8)
+    x, y = current.exterior.xy
+    plt.plot(x, y, c="blue")
+    x_bot, y_bot = current.bounds[:2]
+    plt.annotate(index, (x_bot + 2, y_bot + 2), color="red", ha="center", va="center", fontsize=8)
+    centroid_last = last.centroid
+    centroid_current = current.centroid
+    x_centroids = [centroid_last.x, centroid_current.x]
+    y_centroids = [centroid_last.y, centroid_current.y]
+    plt.plot(x_centroids, y_centroids, "k--", label="Related")
 
 def layout(anchors, sides):
     # Assumption: Between consecutive bins, there are atleast two squares.
-    existing = Polygon([(0, 0), (sides[0], 0), (sides[0], sides[0]), (0, sides[0]), (0, 0)])
+    existing = Polygon([(0, 0), (sides[0][0], 0), (sides[0][0], sides[0][1]), (0, sides[0][1]), (0, 0)])
+    prev = existing
     last = existing
     # Plot the polygon
-    plot(last, 0)
+    plot(prev, last, 0)
     left_index = 0
     for right_index in anchors[1::]:
         mid = (right_index + left_index) // 2
@@ -179,7 +323,8 @@ def layout(anchors, sides):
                 existing = unary_union([existing, optimum_top])
                 last = optimum_top
             # Plot the polygon
-            plot(last, index)
+            plot(prev, last, index)
+            prev = last
         for index in range(mid + 1, right_index):
             side = sides[index]
             optimum_bottom, min_bot = translate_bottom(last, existing, side)
@@ -200,12 +345,13 @@ def layout(anchors, sides):
                 existing = unary_union([existing, optimum_rb])
                 last = optimum_rb
             # Plot the polygon
-            plot(last, index)
+            plot(prev, last, index)
+            prev = last
         # Place the envelope separately on the x-axis. Use red colour for its borders.
         x_min = last.bounds[0]
         x_max = last.bounds[2]
         side = sides[right_index]
-        translated = Polygon([(x_min, 0), (x_min + side, 0), (x_min + side, side), (x_min, side), (x_min, 0)])
+        translated = Polygon([(x_min, 0), (x_min + side[0], 0), (x_min + side[0], side[1]), (x_min, side[1]), (x_min, 0)])
         min_area = sys.maxsize
         if existing.touches(translated) or existing.disjoint(translated):
             envelope = unary_union([existing, translated]).bounds
@@ -219,7 +365,8 @@ def layout(anchors, sides):
         last = optimum_env
         left_index = right_index
         # Plot the polygon.
-        plot(last, right_index)
+        plot(prev, last, right_index)
+        prev = last
 
 def main():
     """
@@ -233,7 +380,11 @@ def main():
     adj_list = {} # A dictionary, where marked nodes are mapped to their alphabetical slaves' sides' list
     sides = [] # A list of side lengths. For masters whose envelopes haven't been created, length = length of master.
     anchors = [] # A list of anchors, i.e. squares constrained on the x-axis.
+    Improvements:
+    We consider all the masters and slaves are still squares as before, but to reduce clearance between 
+    squares, we consider that envelopes can be rectangles as well. Now, sides is a list of lists [length, breadth].
     """
+    
     adj_list, sides, anchors = populate({}, [], [])
     adj_list, sides = create_envelopes(adj_list, sides)
     plt.tight_layout()
