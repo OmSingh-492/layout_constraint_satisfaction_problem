@@ -6,32 +6,12 @@ import matplotlib.pyplot as plt
 
 def populate(adj_list, sides, anchors):
     # FILL IN WITH METHOD TO POPULATE THE DATA STRUCTURES. KEEP INTEGRAL SIDE LENGTHS.
-    adj_list = {}
+    adj_list = {0: [[10, 5]], 1: [[10, 5]], 2: [[5, 10]], 3: [[10, 10], [10, 5], [10, 10], [5, 10]],
+               4: [[10, 5], [5, 10]], 5: [[10, 10]], 6: [[10, 5], [5, 10], [5, 10]], 7: [[5, 10]],
+               8: [[5, 10]], 9: [[10, 10], [10, 5]]}
     sides = [[15, 25], [10, 20], [20, 30], [80, 100], [15, 35], [12, 22], [25, 50], [15, 25], [20, 30], [20, 40]]
     anchors = [0, 3, 6, 9]
     return adj_list, sides, anchors
-
-def create_envelopes(adj_list, sides):
-    # Create an envelope for master-slaves, to pack the envelopes later instead of actual squares.
-    for rect in adj_list.keys():
-        slaves = adj_list[rect]
-        side_master = sides[int(rect[1])][0]
-        number_slaves = len(slaves)
-        """
-        Refer notes to visualise what all edge cases have been excluded, and the reasoning behind the choices.
-        Assumption: Number of slaves <= 4.
-        """
-        if number_slaves == 1:
-            side = slaves[0] + side_master
-        elif number_slaves == 2:
-            side = slaves[0] + slaves[1] + side_master
-        elif number_slaves == 3:
-            side = slaves[2] + max(slaves[0], slaves[1]) + side_master
-        else:
-            side = max(slaves[2], slaves[3]) + max(slaves[0], slaves[1]) + side_master
-        sides[int(rect[1])] = [side_master, side]
-    # First function which should be ran for creating envelopes.
-    return adj_list, sides
 
 def translate_bottom(last, existing, side):
     # Idea: Place the initial polygon at the bottom left, and translate it till it reaches bottom right.
@@ -281,25 +261,84 @@ def translate_top_left(last, existing, side):
         else:
             return optimum_rb_rotated, min_area_rotated
 
-def plot(last, current, index):
-    # A generic plotting function.
-    x, y = current.exterior.xy
+def plot_masters(placed):
+    # Plot the 0th master.
+    x, y = placed[0].exterior.xy
     plt.plot(x, y, c="blue")
-    x_bot, y_bot = current.bounds[:2]
-    plt.annotate(index, (x_bot + 2, y_bot + 2), color="red", ha="center", va="center", fontsize=8)
-    centroid_last = last.centroid
-    centroid_current = current.centroid
-    x_centroids = [centroid_last.x, centroid_current.x]
-    y_centroids = [centroid_last.y, centroid_current.y]
-    plt.plot(x_centroids, y_centroids, "k--", label="Related")
+    x_bot, y_bot = placed[0].bounds[:2]
+    plt.annotate(0, (x_bot + 2, y_bot + 2), color="red", ha="center", va="center", fontsize=8)
+    last = placed[0]
+    for index in range(1, len(placed)):
+        current = placed[index]
+        x, y = current.exterior.xy
+        plt.plot(x, y, c="blue")
+        x_bot, y_bot = current.bounds[:2]
+        plt.annotate(index, (x_bot + 2, y_bot + 2), color="red", ha="center", va="center", fontsize=8)
+        centroid_last = last.centroid
+        centroid_current = current.centroid
+        x_centroids = [centroid_last.x, centroid_current.x]
+        y_centroids = [centroid_last.y, centroid_current.y]
+        plt.plot(x_centroids, y_centroids, "k-.")
+        last = current
+    
+def plot_slaves(placed, existing, adj_list, area):
+    for index in adj_list:
+        master = placed[index]
+        slaves = adj_list[index] # A list of [length, breadth] for all the slaves of the master.
+        count = "a"
+        centroid_master = master.centroid
+        for side in slaves:
+            candidates = []
+            optimum_top, min_top = translate_top(master, existing, side)
+            optimum_rt, min_rt = translate_top_right(master, existing, side)
+            optimum_bottom, min_bot = translate_bottom(master, existing, side)
+            optimum_rb, min_rb = translate_top_left(master, existing, side)
+            # Populating candidates for the position for the slave in question.
+            if optimum_top.bounds[0] >= 0 and optimum_top.bounds[1] >= 0 and min_top != -1:
+                candidates.append(min_top)
+            if optimum_rt.bounds[0] >= 0 and optimum_rt.bounds[1] >= 0 and min_rt != -1:
+                candidates.append(min_rt)
+            if optimum_bottom.bounds[0] >= 0 and optimum_bottom.bounds[1] >= 0 and min_bot != -1:
+                candidates.append(min_bot)
+            if optimum_rb.bounds[0] >= 0 and optimum_rb.bounds[1] >= 0 and min_rb != -1:
+                candidates.append(min_rb)
+            candidates.sort()
+            if len(candidates) == 0:
+                print("Placement of slave with values", side, "for index:", index, "needs manual adjustment!")
+                continue
+            if candidates[0] == min_top:
+                best = optimum_top
+                existing = unary_union([existing, optimum_top])
+            elif candidates[0] == min_rt:
+                best = optimum_rt
+                existing = unary_union([existing, optimum_rt])
+            elif candidates[0] == min_bot:
+                best = optimum_bottom
+                existing = unary_union([existing, optimum_bottom])
+            else:
+                best = optimum_rb
+                existing = unary_union([existing, optimum_rb])
+            area += best.area
+            x, y = best.exterior.xy
+            plt.plot(x, y, c="blue")
+            x_bot, y_bot = best.bounds[:2]
+            plt.annotate(str(index) + count, (x_bot + 2, y_bot + 2), color="red", ha="center", va="center", fontsize=8)
+            count = chr(ord(count) + 1)
+            centroid_best = best.centroid
+            x_centroids = [centroid_master.x, centroid_best.x]
+            y_centroids = [centroid_master.y, centroid_best.y]
+            plt.plot(x_centroids, y_centroids, "g:")
+    return area, existing
 
-def layout(anchors, sides):
+def layout(adj_list, anchors, sides):
+    # A list of all the polygons, which shall be plotted in the end simultaneously.
+    placed = []
+    area = 0
     # Assumption: Between consecutive bins, there are atleast two squares.
     existing = Polygon([(0, 0), (sides[0][0], 0), (sides[0][0], sides[0][1]), (0, sides[0][1]), (0, 0)])
-    prev = existing
     last = existing
-    # Plot the polygon
-    plot(prev, last, 0)
+    placed.append(last)
+    area += last.area
     left_index = 0
     for right_index in anchors[1::]:
         mid = (right_index + left_index) // 2
@@ -322,9 +361,8 @@ def layout(anchors, sides):
             else:
                 existing = unary_union([existing, optimum_top])
                 last = optimum_top
-            # Plot the polygon
-            plot(prev, last, index)
-            prev = last
+            placed.append(last)
+            area += last.area
         for index in range(mid + 1, right_index):
             side = sides[index]
             optimum_bottom, min_bot = translate_bottom(last, existing, side)
@@ -344,10 +382,9 @@ def layout(anchors, sides):
             else:
                 existing = unary_union([existing, optimum_rb])
                 last = optimum_rb
-            # Plot the polygon
-            plot(prev, last, index)
-            prev = last
-        # Place the envelope separately on the x-axis. Use red colour for its borders.
+            placed.append(last)
+            area += last.area
+        # Place the envelope separately on the x-axis.
         x_min = last.bounds[0]
         x_max = last.bounds[2]
         side = sides[right_index]
@@ -364,34 +401,34 @@ def layout(anchors, sides):
         existing = unary_union([existing, optimum_env])
         last = optimum_env
         left_index = right_index
-        # Plot the polygon.
-        plot(prev, last, right_index)
-        prev = last
+        placed.append(last)
+        area += last.area
+    plot_masters(placed)
+    area, existing = plot_slaves(placed, existing, adj_list, area)
+    return existing.envelope.area, area
 
 def main():
     """
     Both slaves and masters have been taken to be squares.
     Number the bins so that Bi is close to ith envelope.
-    Ex: adj_list = {"B7": [2, 4, 2, 4], ...}
-    sides = [10, 15, 1, 4, ...]
+    Ex: adj_list = {7: [[2, 4], [2, 4]], ...}
+    sides = [[10, 15], [1, 4], ...]
     anchors = [1, 7, 9, ...]
-    To get the length of B7 master, look at the 7th index in the sides list.
     Keep everything zero-indexed.
-    adj_list = {} # A dictionary, where marked nodes are mapped to their alphabetical slaves' sides' list
-    sides = [] # A list of side lengths. For masters whose envelopes haven't been created, length = length of master.
-    anchors = [] # A list of anchors, i.e. squares constrained on the x-axis.
-    Improvements:
-    We consider all the masters and slaves are still squares as before, but to reduce clearance between 
-    squares, we consider that envelopes can be rectangles as well. Now, sides is a list of lists [length, breadth].
+    adj_list = {} # A dictionary, where nodes are mapped to their alphabetical slaves' sides' list
+    sides = [] # A list of side lengths. sides[i] = [length, breadth] of the ith master.
+    anchors = [] # A list of anchors' indices, i.e. squares constrained on the x-axis.
+    Ex: adj_list[7] gives all rectangles adjacent to the index = 7 rectangle.
     """
     
     adj_list, sides, anchors = populate({}, [], [])
-    adj_list, sides = create_envelopes(adj_list, sides)
     plt.tight_layout()
     ax = plt.gca()
     ax.set_aspect('equal', adjustable='box')
-    print(sides)
-    layout(anchors, sides)
+    envelope_area, area = layout(adj_list, anchors, sides)
+    print("Area of the envelope:", envelope_area)
+    print("Actual covered area:", float(area))
+    print("Area efficiency achieved:", (area * 100) / envelope_area, "%")
     plt.show()
 
 if __name__ == "__main__":
