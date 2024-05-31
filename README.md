@@ -1,6 +1,25 @@
 # layout_optimisation
 Work done on the Raman Project at Sacha Engineering:
 
+Problem Statement in detail:
+We have a lot of factory objects, which are mostly rectangles, or can be modelled as rectangles. Their sizes,
+lengths and breadths, are given in the sizes.txt file, although it's just a matter of nomenclature.
+Also, they have to be placed in such a way that certain adjacency constraints are satisfied. For example, a robot
+named R001 should serve the bin labelled B001 and so on. There are a lot of such constraints.
+Further, all the bins must be on the edges of the enclosing envelope of all the rectangles of the enclosing 
+envelope, while satifying the adjacencies.
+This is a NP-Hard Problem. Methods tried:
+1. Branch and Bound.
+2. Guillotine Cuts.
+3. Greedy Heuristics.
+4. Shapely library based optimisations.
+5. Interior Point Optimisation.
+6. Linear Programming.
+What worked finally: Modelling as a Constraint-Satisfaction Problem, and pruning the region of search wisely.
+Consider a mathematical solution, and all orientations of the shape at hand.
+
+This poblem is now closed, as it gave extremely low runtimes (~5 minutes) even for more than 500 rectangles.
+
 Summer-2023 attempt:
 Some greedy heuristics have been tried. This shall be published as the v1.0 of the program.
 It does well for small number of squares, upto 25 or so.
